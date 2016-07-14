@@ -34,7 +34,7 @@ def log(gal, exponent=1000):
 
 
 def adapt_hist(gal):
-    return eps.equalize_adapthist(norm(gal), nbins=512, kernel_size=32, clip_limit=0.1)
+    return eps.equalize_adapthist(norm(gal), nbins=1024, kernel_size=100, clip_limit=0.1)
 
 
 def truncate(init_data, seg_data, cat_data, py, px):
@@ -63,13 +63,13 @@ def truncate(init_data, seg_data, cat_data, py, px):
 
 def display():
     ds9 = '/Applications/SAOImage\ DS9.app/Contents/MacOS/ds9'
-    cmd = '-log -zoom to fit -minmax -invert -cmap value 1.75 0.5'
-    ct = pd.read_csv('list.csv')
-    for i in range(16):
-        objs = ''
-        for j in range(i * 50, min((i + 1) * 50, 784)):
-            objs += '/Users/franky/Desktop/type2/image/%s_r.fits ' % ct.ix[j]['NAME2']
-        subprocess.Popen('%s %s %s' % (ds9, cmd, objs), executable='/bin/zsh', shell=True)
+    cmd = '-log -zoom to fit -minmax -invert -cmap value 1.75 0.4'
+    fits = open('fits_list.param', 'r')
+    objs = ''
+    # print(fits.readlines())
+    for fit in fits.readlines()[30:]:
+        objs += '/Users/franky/Desktop/type1/image/%s_r.fits ' % fit[:19]
+    subprocess.Popen('%s %s %s' % (ds9, cmd, objs), executable='/bin/zsh', shell=True)
     return
 
 
@@ -90,7 +90,9 @@ def inpainting(image, mask_map):
 def cal_ay(image, belong_to_galaxy):
     zero = np.zeros_like(image)
     I = np.where(belong_to_galaxy, image, zero)
-    plt.imsave('/Users/franky/Desktop/templates/init/1/%s.jpg' % fit, -log(I), cmap='gray', dpi=400)
+    plt.imsave('/Users/franky/Desktop/templates/init/1/%s_init.jpg' % fit, -I, cmap='gray', dpi=400)
+    plt.imsave('/Users/franky/Desktop/templates/init/1/%s_log.jpg' % fit, -log(I), cmap='gray', dpi=400)
+    plt.imsave('/Users/franky/Desktop/templates/init/1/%s_adpt.jpg' % fit, -adapt_hist(log(I)), cmap='gray', dpi=400)
     I180 = np.rot90(I, 2)
     return np.sum(np.abs(I - I180)) * 0.5 / np.sum(np.abs(I))
 
@@ -98,15 +100,20 @@ def cal_ay(image, belong_to_galaxy):
 if __name__ == '__main__':
     fits = pd.read_csv('list.csv')
     pro = 0
-    for fit in fits[fits.Z1 < 0.05]['NAME1'].values[:1]:
-        print(fit, end='    ')
-        # fit = 'J114433.07+613200.7'
-        cy, cx, init, seg, cat = load(1, fit)
-        img, sg, btg, poll = truncate(init, seg, cat, cy, cx)
-        # inpaint_img = inpainting(img, seg2mask(sg, poll))
-        # plt.imsave('/Users/franky/Desktop/templates/init/%s.jpg' % fit, -adapt_hist(img), cmap='gray', dpi=200)
-        fits.at[pro, 'A'] = cal_ay(img, btg)
-        print(cal_ay(img, btg), end='   ')
-        print(pro)
-        pro += 1
-        fits.to_csv('init1.csv', index=None, columns=['NAME1', 'A'])
+    # for fit in fits[fits.Z1 < 0.05]['NAME1'].values:
+    #     print(fit, end='    ')
+    #     # fit = 'J133815.87+043233.3'
+    #     cy, cx, init, seg, cat = load(1, fit)
+    #     img, sg, btg, poll = truncate(init, seg, cat, cy, cx)
+    #     # inpaint_img = inpainting(img, seg2mask(sg, poll))
+    #     # plt.imsave('/Users/franky/Desktop/templates/init/%s.jpg' % fit, -adapt_hist(img), cmap='gray', dpi=200)
+    #     fits.at[pro, 'I'] = cal_ay(img, btg)
+    #     fits.at[pro, 'L'] = cal_ay(log(img), btg)
+    #     fits.at[pro, 'A'] = cal_ay(adapt_hist((log(img))), btg)
+    #     # print(cal_ay(img, btg), end='   ')
+    #     # print(cal_ay(log(img), btg), end='   ')
+    #     # print(cal_ay(adapt_hist((log(img))), btg), end='   ')
+    #     print(pro)
+    #     pro += 1
+    #     fits.to_csv('type1.csv', index=None, columns=['NAME1', 'I', 'L', 'A'])
+    display()
