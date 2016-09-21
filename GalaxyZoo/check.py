@@ -13,30 +13,17 @@ def selection(feature, sample):
                       (sample.t02_edgeon_a05_no_fraction > 0.519) &
                       (sample.t03_bar_a06_bar_count > 10) &
                       (sample.t03_bar_a06_bar_fraction > 0.3)]
-    elif feature == 'spiral':
-        return sample[(sample.t01_smooth_or_features_a02_features_or_disk_fraction > 0.227) &
-                      (sample.t02_edgeon_a05_no_fraction > 0.519) &
-                      (sample.t04_spiral_a08_spiral_count > 10) &
-                      (sample.t04_spiral_a08_spiral_fraction > 0.3)]
-    elif feature == 'odd':
-        return sample[(sample.t06_odd_a14_yes_count > 10) &
-                      (sample.t06_odd_a14_yes_fraction > 0.3)]
 
 
-def feature_farction(sample):
-    sep = 0.01
-    for z in np.arange(0, 0.2, sep):
-        whole = sample[(sample.z <= z + sep) & (sample.z > z)]
-        whole = whole.sort_values(by='Mr')
-        whole.index = range(len(whole))
-        complete_index = whole[whole.mr > 17].index[0] - 1
-        print(complete_index)
-        com_set = whole.ix[:complete_index]
-        for fea in features:
-            reset_index = gal[(gal.z == z) & (gal.feature == fea)].index[0]
-            gal.at[reset_index, 'Mr'] = whole.ix[complete_index, 'Mr']
-            gal.at[reset_index, 'fraction'] = len(selection(fea, com_set)) / len(com_set)
-    print(gal)
+def calculate_fraction():
+    for z in z_range:
+        whole = zoo[(zoo.z > z) & (zoo.z < z+0.01) & (zoo.Mr < -20.89) & (zoo.mr < 17)]
+        bar = whole[(whole.t01_smooth_or_features_a02_features_or_disk_fraction > 0.430) &
+                    (whole.t02_edgeon_a05_no_fraction > 0.715) &
+                    (whole.t02_edgeon_a05_no_count >= 20)]
+        result = bar[bar.t03_bar_a06_bar_fraction >= 0.8]
+        rid = gal[(gal.Mr == -20.89) & (gal.z == z) & (gal.root == 'bar')].index[0]
+        gal.at[rid,'fraction'] = len(result)/len(bar)
     gal.to_csv('gal.csv', index=False)
 
 
@@ -46,16 +33,19 @@ zoo['Mr'] = uni.ix[zoo.dr7objid.values].PETROMAG_MR.values
 zoo['mr'] = uni.ix[zoo.dr7objid.values].PETROMAG_R.values
 zoo['z'] = uni.ix[zoo.dr7objid.values].REDSHIFT.values
 # z, Mr, mr
-gal = pd.DataFrame(columns=['z', 'Mr', 'fraction', 'feature'])
+gal = pd.DataFrame(columns=['z', 'Mr', 'fraction', 'feature', 'root'])
 
 features = ['bar', 'odd', 'spiral']
+z_range = np.arange(0.01, 0.2, 0.01)
+nz = len(z_range)
+mag_range = np.arange(-19.89, -21.89, -0.5)
+nm = len(mag_range)
+root_range = ['whole', 'bar']
+nr = len(root_range)
+gal['z'] = np.repeat(z_range, nm * nr)
+gal['Mr'] = np.tile(np.repeat(mag_range, nr), np.array(nz))
+gal['root'] = np.tile(root_range, np.array(nz * nm))
 
-gal['z'] = np.repeat(np.arange(0, 0.2, 0.01), 3)
-gal['feature'] = np.tile(features, 20)
-# gal.index = gal.z
-
-# print(gal)
-feature_farction(zoo)
-f = sns.FacetGrid(gal,col='feature',sharey=False,xlim=[0,0.2])
-f.map(sns.tsplot, 'z','fraction')
+calculate_fraction()
+plt.plot(z_range,gal[(gal.Mr == -20.89) & (gal.root == 'bar')]['fraction'].values)
 plt.show()
