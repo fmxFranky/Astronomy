@@ -1,4 +1,4 @@
-## 本文档是关于 GalaxyZoo 文件夹里面各个文件的用途的备注
+## GalaxyZoo 文件夹里各个文件的用途的备注
 
 |File|Introduction
 |:----:|:----

@@ -6,6 +6,9 @@ from astropy import units as u
 import seaborn as sns
 import matplotlib.pyplot as plt
 import warnings
+import pyprind
+import sys
+from termcolor import cprint, colored
 
 
 def add_central_flag_from_group(agn_type):
@@ -38,7 +41,7 @@ def add_central_flag_from_group(agn_type):
 def match_initial_data(agn_type):
     """
     将原始数据和 GZ2的 Full-Catalog 进行匹配,在重新生成另一个 catalog,
-    同时将 flux 替换为 lum_oiii,并且加入这个星系在 GZ2 Full-Catalog 里面的 id
+    同时将 flux 替换为 lum_oiii,并且加入这个星系在 GZ2 Full-Catalog 里面的 id和 gz2class
     type1匹配率: 43%
     type2匹配率: 53%
     :param agn_type:
@@ -50,8 +53,11 @@ def match_initial_data(agn_type):
     matched_index = np.where(sep2d.arcsec < 1)[0]
     matched_agn_type = initial_agn_type.ix[matched_index, :]
     matched_agn_type['gz2id'] = idx[matched_index]
+    matched_agn_type['sep2d'] = sep2d[matched_index].arcsec
+
+    matched_agn_type['gz2class'] = zoo.gz2class[idx[matched_index]].astype(str).values
     flux2luminous(matched_agn_type).to_csv('matched_%s_galaxy.csv' % agn_type, index=None,
-                                           columns=['name', 'ra', 'dec', 'z', 'lum_oiii', 'petro_abs_mag', 'central', 'gz2id'])
+                                           columns=['name', 'ra', 'dec', 'z', 'lum_oiii', 'petro_abs_mag', 'central', 'gz2id', 'gz2class', 'sep2d'])
 
 
 def control_sample(match_num=5):
@@ -67,9 +73,9 @@ def control_sample(match_num=5):
     matched_type1 = pd.read_csv('matched_type1_galaxy.csv')
     matched_type2 = pd.read_csv('matched_type2_galaxy.csv')
 
-    ctrl = pd.DataFrame(columns=['name1', 'ra1', 'dec1', 'z1', 'lum_oiii1', 'petro_abs_mag1', 'central1', 'gz2id1',
-                                 'name2', 'ra2', 'dec2', 'z2', 'lum_oiii2', 'petro_abs_mag2', 'central2', 'gz2id2'])
-
+    ctrl = pd.DataFrame(columns=['name1', 'ra1', 'dec1', 'z1', 'lum_oiii1', 'petro_abs_mag1', 'central1', 'gz2id1', 'gz2class1', 'sep2d1',
+                                 'name2', 'ra2', 'dec2', 'z2', 'lum_oiii2', 'petro_abs_mag2', 'central2', 'gz2id2', 'gz2class2', 'sep2d2'])
+    progress_bar = pyprind.ProgBar(len(matched_type1), stream=sys.stdout, bar_char='█', width=47, title=colored('controlling sample', color='blue', attrs=['bold']))
     for i in matched_type1.index:
         agn = matched_type1.ix[i]
         cs = matched_type2[(abs(matched_type2.petro_abs_mag - agn.petro_abs_mag) < 0.1) &
@@ -82,6 +88,7 @@ def control_sample(match_num=5):
             for j in cs.index[:match_num]:
                 ctrl = ctrl.append(pd.DataFrame([np.concatenate((agn.values, cs.ix[j].values), axis=0)],
                                                 columns=ctrl.columns), ignore_index=True)
+        progress_bar.update()
 
     ctrl.to_csv('type12_controlled_initial.csv', index=None)
 
@@ -108,7 +115,7 @@ def create_zfl(agn_type):
 
 def flux2luminous(sample):
     """
-    通过插值将 flux 转换成 luminous
+    通过插值将 flux 转换成 luminous(如果原始数据没有 luminous)
     :param: sample
     :return:
     """
@@ -137,7 +144,7 @@ def initialize_gz2():
 
 if __name__ == '__main__':
     warnings.filterwarnings('ignore')
-    pd.set_option('display.width', 400)
+    pd.set_option('display.width', 200)
 
     # zoo 读取不要修改 index,用 range(len(zoo))
     zoo = pd.read_csv('zoo2MainSpecz.csv', header=0)
