@@ -2,11 +2,16 @@ import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import astropy.units as unit
+import astropy.units as u
 import astropy.cosmology as COS
+from astropy.coordinates import SkyCoord
 from astropy.cosmology import LambdaCDM
 import warnings
 from scipy import interpolate
+import pyprind
+import sys
+from termcolor import colored
+from scipy.stats import poisson
 
 
 def merge_init_and_mat(agn_type):
@@ -25,50 +30,56 @@ def merge_init_and_mat(agn_type):
     x.to_csv('initial_%s.csv' % agn_type, index=None, columns=['name', 'ra', 'dec', 'z', 'lum_oiii', 'petro_abs_mag', 'petro_app_mag', 'central', 'gz2id', 'gz2class'])
 
 
-def control(z_cut, pre_match=False):
-    mag_cut = 17 - LambdaCDM(H0=70, Om0=.3, Ode0=.7).distmod(z_cut).value - 5 * np.log10(0.7)
+def mag_at_value(z):
+    return 17 - LambdaCDM(H0=70, Om0=.3, Ode0=.7).distmod(z).value - 5 * np.log10(0.7)
 
+
+def control(z_cut, mag_cut):
     x = pd.read_csv('initial_type1.csv')
     y = pd.read_csv('initial_type2.csv')
-    if pre_match:
-        x = x[~x.gz2id.isnull()]
-        y = y[~y.gz2id.isnull()]
-    x = x[(x.z < z_cut) & (x.petro_abs_mag < mag_cut)]
-    y = y[(y.z < z_cut) & (y.petro_abs_mag < mag_cut)]
+    z = pd.read_csv('full.csv')
 
-    import pyprind
-    import sys
-    from termcolor import colored
-    progress_bar = pyprind.ProgBar(len(x), stream=sys.stdout, bar_char='█', width=47, title=colored('Controlling sample   ', color='blue', attrs=['bold']) +
-                                                                                            colored('z_cut=%f mag_cut=%f pre_match=%s' % (z_cut, mag_cut, pre_match), color='cyan', attrs=['bold']))
-    ctrl = pd.DataFrame(columns=['name_1', 'ra_1', 'dec_1', 'z_1', 'lum_oiii_1', 'petro_abs_mag_1', 'petro_app_mag_1', 'central_1', 'gz2id_1', 'gz2class_1',
-                                 'name_2', 'ra_2', 'dec_2', 'z_2', 'lum_oiii_2', 'petro_abs_mag_2', 'petro_app_mag_2', 'central_2', 'gz2id_2', 'gz2class_2'])
+    x = x[(x.z < z_cut) & (x.petro_abs_mag < mag_cut) & (~x.gz2id.isnull())]
+    y = y[(y.z < z_cut) & (y.petro_abs_mag < mag_cut) & (~y.gz2id.isnull())]
+    z = z[(z.z < z_cut) & (z.petro_abs_mag < mag_cut) & (~z.gz2id.isnull())]
+
+    title = colored('Controlling sample   ', color='blue', attrs=['bold'])
+    info = colored('z_cut=%f mag_cut=%f' % (z_cut, mag_cut), color='cyan', attrs=['bold'])
+    progress_bar = pyprind.ProgBar(len(x), stream=sys.stdout, bar_char='█', width=47, title=title + info)
+
+    ctrl = pd.DataFrame()
     for i in x.index:
-        agn = x.ix[i]
-        cs = y[(abs(y.petro_abs_mag - agn.petro_abs_mag) < 0.1) &
-               (abs(y.z - agn.z) < 0.01) &
-               (y.central == agn.central)]
-        if len(cs) >= 5:
-            cs['diff_lum'] = abs(cs.lum_oiii - agn.lum_oiii)
-            cs.sort_values(inplace=True, by='diff_lum')
-            cs.drop('diff_lum', 1, inplace=True)
-            for j in cs.index[:5]:
-                ctrl = ctrl.append(pd.DataFrame([np.concatenate((agn.values, cs.ix[j].values), axis=0)],
-                                                columns=ctrl.columns), ignore_index=True)
+        one = x.ix[i]
+        two = y[(abs(y.petro_abs_mag - one.petro_abs_mag) < 0.1) &
+                (abs(y.z - one.z) < 0.01) &
+                (y.central == one.central)]
+
+        if len(two) >= 5:
+            two['diff_lum'] = abs(two.lum_oiii - one.lum_oiii)
+            two.sort_values(inplace=True, by='diff_lum')
+            two.drop('diff_lum', 1, inplace=True)
+            two = two[:5]
+
+            normtwo = pd.DataFrame()
+            for j in two.index:
+                tw = two.ix[j]
+                ntw = z[(abs(z.z - tw.z) < 0.01) & (z.central == tw.central) & (z.galaxyid != tw.galaxyid)]
+                ntw['diff_mag'] = abs(ntw.petro_abs_mag - tw.petro_abs_mag)
+                ntw.sort_values(inplace=True, by='diff_mag')
+                ntw.drop('diff_mag', 1, inplace=True)
+                normtwo = normtwo.append(ntw[:1])
+
+            normone = z[(abs(z.z - one.z) < 0.01) & (z.central == one.central) & (z.galaxyid != one.galaxyid)]
+            normone['diff_mag'] = abs(normone.petro_abs_mag - one.petro_abs_mag)
+            normone.sort_values(inplace=True, by='diff_mag')
+            normone.drop('diff_mag', 1, inplace=True)
+            normone = normone[:5]
+
+            ctrl = ctrl.append(one.to_frame().T.append(two.append(normtwo.append(normone))))
+
         progress_bar.update()
 
-    ctrl.to_csv('match_type12_%.2f_%s.csv' % (z_cut, pre_match), index=False)
-
-
-def transform_format(z_cut, pre_match):
-    x = pd.read_csv('match_type12_%.2f_%s.csv' % (z_cut, pre_match))
-    y = pd.DataFrame(data=np.full((len(x) * 2, 11), np.nan), columns=['name', 'ra', 'dec', 'z', 'lum_oiii', 'petro_abs_mag', 'petro_app_mag', 'central', 'gz2id', 'gz2class', 'agn'])
-    y.agn = np.tile(['type1', 'type2'], [len(x)])
-
-    for col in cls[:len(cls) - 1]:
-        y.at[0:len(x) * 2:2, col] = x.ix[:len(x), col + '_1'].values
-        y.at[1:len(x) * 2:2, col] = x.ix[:len(x), col + '_2'].values
-    return y
+    ctrl.to_csv('match_%.2f_%.2f.csv' % (z_cut, mag_cut), index=False)
 
 
 def distribution_check():
@@ -80,66 +91,69 @@ def distribution_check():
     m_bins = np.linspace(-22.5, -18.5, 20)
     for z in z_cut_range:
         # for pm in [False, True]:
-        a = transform_format(z, False)
+        a = pd.read_csv('match.csv')
         a = a[a.central == 1]
 
         plt.subplot(3, 3, od)
-        sns.distplot(a[a.agn == 'type1'].z,
+        sns.distplot(a[a.kind == 'type1'].z,
                      color='b', hist=True, kde=False, bins=z_bins,
                      hist_kws={"histtype": "step", 'alpha': 1, 'linewidth': 1}).set(ylabel='z_cut=%.2f\n\ncount' % z)
-        sns.distplot(a[a.agn == 'type2'].z,
+        sns.distplot(a[a.kind == 'type2'].z,
                      color='r', hist=True, kde=False, bins=z_bins,
                      hist_kws={"histtype": "step", 'alpha': 1, 'linewidth': 1})  # .legend(['type1','type2'])
         if od == 1:
             plt.legend(['type1', 'type2'], loc='upper left')
 
         plt.subplot(3, 3, od + 1)
-        sns.distplot(a[a.agn == 'type1'].lum_oiii,
+        sns.distplot(a[a.kind == 'type1'].lum_oiii,
                      color='b', hist=True, kde=False, bins=l_bins,
                      hist_kws={"histtype": "step", 'alpha': 1, 'linewidth': 1})
-        sns.distplot(a[a.agn == 'type2'].lum_oiii,
+        sns.distplot(a[a.kind == 'type2'].lum_oiii,
                      color='r', hist=True, kde=False, bins=l_bins,
                      hist_kws={"histtype": "step", 'alpha': 1, 'linewidth': 1})  # .legend(['type1', 'type2'])
 
         plt.subplot(3, 3, od + 2)
-        sns.distplot(a[a.agn == 'type1'].petro_abs_mag,
+        sns.distplot(a[a.kind == 'type1'].petro_abs_mag,
                      color='b', hist=True, kde=False, bins=m_bins,
                      hist_kws={"histtype": "step", 'alpha': 1, 'linewidth': 1})
-        sns.distplot(a[a.agn == 'type2'].petro_abs_mag,
+        sns.distplot(a[a.kind == 'type2'].petro_abs_mag,
                      color='r', hist=True, kde=False, bins=m_bins,
                      hist_kws={"histtype": "step", 'alpha': 1, 'linewidth': 1})  # .legend(['type1', 'type2'])
         od += 3
 
 
 def show_diff():
-    z_cut_range = np.linspace(0.05, 0.09, 3)
-    xy = pd.DataFrame(columns=['agn', 'fraction', 'z', 'pre_matched','total'])
-    for z in z_cut_range:
-        for pm in [False, True]:
-            x = transform_format(z, pm)
+    ctrl = pd.DataFrame()
+    for z_cut in np.linspace(0.05, 0.09, 3):
+        for mag_cut in [0, mag_at_value(z_cut)]:
+            x = pd.read_csv('match_%.2f_%.2f.csv' % (z_cut, mag_cut))
             x = x[x.central == 1]
-            y = pd.DataFrame([['type1', len(x[(x.agn == 'type1') & (x.gz2class.str.contains('SB'))]) / len(x[x.agn=='type1']), z, pm,len(x)/2],
-                              ['type2', len(x[(x.agn == 'type2') & (x.gz2class.str.contains('SB'))]) / len(x[x.agn=='type2']), z, pm,len(x)/2]],
-                             columns=['agn', 'fraction', 'z', 'pre_matched','total'])
-            xy = xy.append(y)
-    xy['num'] = xy.total*xy.fraction
-    print(xy)
-    sns.set(style="ticks")
-    sns.factorplot('z', 'fraction', hue='agn', col='pre_matched',ci=None, data=xy, size=7, alpha=.7,
-                   palette=sns.color_palette(flatui))
+            x['bar'] = 0
+            for k in ['type1', 'type2', 'normal']:
+                spiral_fraction = len(x[x.kind == k]) / len(x[(x.kind == k) & (x.gz2class.str.contains('S')) & (~x.gz2class.str.contains('Se'))])
+                x['bar'][(~x.gz2id.isnull()) & (x.gz2class.str.contains('SB'))] = 1
+            x['cut_z'] = z_cut
+            x['cut_mag'] = 'mag(z)' if mag_cut == mag_at_value(z_cut) else ('mag(z+0.02)' if mag_cut == mag_at_value(z_cut + 0.02) else 'none')
+            ctrl = ctrl.append(x)
+    ctrl.to_csv('hh.csv', index=None)
+    sns.factorplot(x='cut_z', y='bar', hue='kind', col='cut_mag', data=ctrl, size=7,
+                   estimator=np.mean, ci=68, capsize=.1, n_boot=1000).fig.suptitle('Bar/Spiral')
+    return
 
 
 if __name__ == '__main__':
     warnings.filterwarnings('ignore')
     pd.set_option('display.width', 200)
     flatui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
-    cls = ['name', 'ra', 'dec', 'z', 'lum_oiii', 'petro_abs_mag', 'petro_app_mag', 'central', 'gz2id', 'gz2class', 'agn']
-
-    # w = {}
-    # for i in ['name', 'ra', 'dec', 'z', 'lum_oiii', 'petro_abs_mag', 'petro_app_mag', 'central', 'gz2id', 'gz2class']:
-    #     w[i+'1'] = i+'_1'
-    #     w[i+'2'] = i+'_2'
-    # distribution_check()
+    cls = ['galaxyid', 'kind', 'ra', 'dec', 'z', 'app_mag', 'petro_abs_mag', 'central', 'lum_oiii', 'gz2id', 'gz2class']
+    sns.set(style="ticks")
+    # a = pd.read_csv('match_0.05_0.00.csv')
+    # print(len(a[a.kind == 'type1']), len(a[(a.kind=='type1') & (a.gz2class.str.contains('S'))]), len(a[(a.kind=='type1') & (a.gz2class.str.contains('SB'))]))
+    # a = pd.read_csv('hh.csv')
+    # a = a[a.cut_mag != 'mag(z+0.02)']
+    # sns.factorplot(x='cut_z', y='bar', hue='kind', col='cut_mag', data=a, size=7,
+    #                estimator=np.mean, ci=68, capsize=.1, n_boot=1000).fig.suptitle('Bar/Spiral')
     show_diff()
+    # print(a[(a.kind == 'type1') & (a.gz2class.str.contains('S')) & (~a.gz2class.str.contains('Se'))])
     plt.show()
     # print(a)
