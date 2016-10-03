@@ -147,13 +147,18 @@ if __name__ == '__main__':
     flatui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
     cls = ['galaxyid', 'kind', 'ra', 'dec', 'z', 'app_mag', 'petro_abs_mag', 'central', 'lum_oiii', 'gz2id', 'gz2class']
     sns.set(style="ticks")
-    # a = pd.read_csv('match_0.05_0.00.csv')
-    # print(len(a[a.kind == 'type1']), len(a[(a.kind=='type1') & (a.gz2class.str.contains('S'))]), len(a[(a.kind=='type1') & (a.gz2class.str.contains('SB'))]))
-    # a = pd.read_csv('hh.csv')
-    # a = a[a.cut_mag != 'mag(z+0.02)']
-    # sns.factorplot(x='cut_z', y='bar', hue='kind', col='cut_mag', data=a, size=7,
-    #                estimator=np.mean, ci=68, capsize=.1, n_boot=1000).fig.suptitle('Bar/Spiral')
-    show_diff()
-    # print(a[(a.kind == 'type1') & (a.gz2class.str.contains('S')) & (~a.gz2class.str.contains('Se'))])
+    a = pd.read_csv('zoo2MainSpecz.csv')
+    b = pd.read_csv('gz2sample.csv', header=0, index_col='OBJID')
+    a['Mr'] = b.ix[a.dr7objid.values].PETROMAG_MR.values
+    a['z'] = b.ix[a.dr7objid.values].REDSHIFT.values
+    y = []
+    for z in np.arange(0.01,0.2,0.01):
+        x = a[(a.Mr < -20.89) & (a.z < z+0.01) & (a.z > z)]
+        # x = x[(x.t01_smooth_or_features_a02_features_or_disk_fraction > 0.430) &
+        #       (x.t02_edgeon_a05_no_fraction > 0.715) &
+        #       (x.t02_edgeon_a05_no_count >= 20)]
+        y.append(len(x[(x.gz2class.str.contains('SB'))])/len(x[(x.gz2class.str.contains('S')) & (~x.gz2class.str.contains('Se'))]))
+    plt.plot(np.arange(0.01,0.2,0.01),y,'r')
+    plt.yticks(np.linspace(0,1,6))
     plt.show()
     # print(a)
