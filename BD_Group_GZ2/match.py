@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
-import matplotlib_venn as mv
 
 
 def creat_cross_sample():
@@ -28,23 +27,35 @@ def creat_cross_sample():
 def control_sample():
     cross = pd.read_csv('cross_gz2_group_n4bdd.csv', engine='c')
     cross = cross[(~np.isnan(cross.B_T_n4)) & (cross.B_T_n4 > -1) &
-                  (cross.z < 0.06) & (cross.petro_abs_mag < -19.38)]
+                  (cross.z < 0.06) & (cross.petro_abs_mag < -19.38) & (cross.gz2class.str.contains('S'))]
+    print(len(cross))
     bar_sample = cross[(cross.bar_debiased_fraction > 0.5) & (cross.gz2class.str.contains('B'))]
 
-    # plt.plot(np.arange(0.02, 0.06, 0.005), [np.mean(bar_sample[(bar_sample.z < z+0.005) & (bar_sample.z > z)]['B_T_n4']) for z in np.arange(0.02, 0.06, 0.005)], 'kv--')
-    # unbar_sample = cross[(cross.bar_debiased_fraction < 0.3) & (~cross.gz2class.str.contains('B'))]
-    # print(len(bar_sample), len(unbar_sample), len(cross))
-    # create controll sample
-    # k = 0
-    # for i in bar_sample.index[:1]:
-    #     bs = bar_sample.ix[i]
-    #     cbs = unbar_sample[(abs(unbar_sample.z-bs.z) < 0.01) &
-    #                        (abs(unbar_sample.petro_abs_mag - bs.petro_abs_mag) < 0.1) &
-    #                        (abs(unbar_sample.B_T_n4-bs.B_T_n4) < 0.01)]
-    #     if len(cbs) >= 5:
-    #         k += 1
-    # print(k/len(bar_sample))
-    # print(control_unbar_sample)
+    # g = sns.regplot(x='z', y='petro_abs_mag', data=bar_sample, scatter_kws={'s': 7}, color=flatui[1], fit_reg=False)
+    # g.set(ylim=(-19, -22), title='Scatter of Mr-z and mean(B/T)')
+    # h = g.twinx()
+    # h.plot(np.arange(0.02, 0.06, 0.005)+0.0025,
+    #                [np.mean(bar_sample[(bar_sample.z < z+0.005) & (bar_sample.z > z)]['B_T_n4']) for z in np.arange(0.02, 0.06, 0.005)],
+    #                'kv--')
+    # h.set(ylim=(0, 0.6), ylabel='mean(B/T)')
+
+    unbar_sample = cross[(cross.bar_debiased_fraction < 0.3) & (~cross.gz2class.str.contains('B')) & (~cross.gz2class.str.contains('e'))]
+    print(len(bar_sample), len(unbar_sample), len(cross))
+    ctrl = pd.DataFrame()
+    k = 0
+    for i in bar_sample.index[:]:
+        bs = bar_sample.ix[i]
+        cubs = unbar_sample[(abs(unbar_sample.z - bs.z) < 0.01) &
+                            (abs(unbar_sample.petro_abs_mag - bs.petro_abs_mag) < 0.1) &
+                            (abs(unbar_sample.B_T_n4 - bs.B_T_n4) < 0.01)]
+        if len(cubs) >= 5:
+            k += 1
+            # cubs['diff_B_T_n4'] = abs(cubs.B_T_n4 - bs.B_T_n4)
+            # cubs.sort_values(inplace=True, by='diff_B_T_n4')
+            # cubs.drop('diff_B_T_n4', 1, inplace=True)
+            # print(cubs[:5])
+    print(k/len(bar_sample))
+            # print(control_unbar_sample)
 
 
 def verify():
@@ -75,4 +86,5 @@ if __name__ == '__main__':
     # cross = pd.read_csv('cross_gz2_group_n4bdd.csv', engine='c')
     # print(cross)
     control_sample()
+
     sns.plt.show()
