@@ -19,9 +19,16 @@ def creat_cross_sample():
     cross['be_n4'] = n4_bdd.ix[cross.dr7id, 'col24'].values
     cross['Rd_n4'] = n4_bdd.ix[cross.dr7id, 'col28'].values
     cross['dia_n4'] = n4_bdd.ix[cross.dr7id, 'col30'].values
-    cross_gz2_group_n4bdd = cross[['galaxyid', 'gz2id', 'z', 'petro_abs_mag', 'gz2class', 'bar_debiased_fraction',
-                                   'B_T_n4', 'typ', 'Re_n4', 'be_n4', 'Rd_n4', 'dia_n4']]
-    cross_gz2_group_n4bdd.to_csv('cross_gz2_group_n4bdd.csv', index=None)
+    fn_bdd = pd.read_csv('fn_bdd.csv', engine='c', index_col='col0')
+    cross['B_T_fn'] = fn_bdd.ix[cross.dr7id, 'col14'].values
+    cross['Re_fn'] = fn_bdd.ix[cross.dr7id, 'col22'].values
+    cross['be_fn'] = fn_bdd.ix[cross.dr7id, 'col24'].values
+    cross['Rd_fn'] = fn_bdd.ix[cross.dr7id, 'col28'].values
+    cross['dia_fn'] = fn_bdd.ix[cross.dr7id, 'col30'].values
+    cross_gz2_group = cross[['galaxyid', 'gz2id', 'z', 'petro_abs_mag', 'gz2class', 'bar_debiased_fraction', 'typ',
+                             'B_T_n4', 'Re_n4', 'be_n4', 'Rd_n4', 'dia_n4',
+                             'B_T_fn', 'Re_fn', 'be_fn', 'Rd_fn', 'dia_fn']]
+    cross_gz2_group.to_csv('cross_gz2_group_bdd.csv', index=None)
 
 
 def control_sample():
@@ -54,8 +61,8 @@ def control_sample():
             # cubs.sort_values(inplace=True, by='diff_B_T_n4')
             # cubs.drop('diff_B_T_n4', 1, inplace=True)
             # print(cubs[:5])
-    print(k/len(bar_sample))
-            # print(control_unbar_sample)
+    print(k / len(bar_sample))
+    # print(control_unbar_sample)
 
 
 def verify():
@@ -65,6 +72,14 @@ def verify():
     # from astropy.coordinates import SkyCoord
     # from astropy import units as u
     # idx,sep2d,d3d = SkyCoord(ra=gz2.ra2, dec=gz2.dec2, unit=u.deg, frame='icrs').match_to_catalog_sky(SkyCoord(ra=n4_bdd.ra,dec=bar.dec,unit=u.deg,frame='icrs'),nthneighbor=1)
+
+
+def plot_distribution():
+    cross = pd.read_csv('cross_gz2_group_bdd.csv', engine='c')
+    vlc = cross[(cross.z < 0.06) & (cross.petro_abs_mag < -19.38)]
+    vlc = vlc[(vlc.B_T_n4 > -1) & (vlc.B_T_fn > -1)]
+    vlc['diff_B_T'] = abs(vlc.B_T_n4-vlc.B_T_fn)
+    vlc.diff_B_T.plot.hist()
 
 
 if __name__ == '__main__':
@@ -80,11 +95,7 @@ if __name__ == '__main__':
         4: 'AGN non-Liner',
         5: 'Low S/N Liner'
     }
-    # gns_ids = pd.read_table('group_galaxy_id', header=None, engine='python', sep='\s+')
-    # gns_ids.to_csv('group_vagc_dr7_ids.csv', engine='c', index=None)
-    # creat_bar_sample()
-    # cross = pd.read_csv('cross_gz2_group_n4bdd.csv', engine='c')
-    # print(cross)
-    control_sample()
-
+    # creat_cross_sample()
+    # control_sample()
+    plot_distribution()
     sns.plt.show()
