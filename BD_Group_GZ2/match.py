@@ -32,11 +32,12 @@ def creat_cross_sample():
 
 
 def control_sample():
-    cross = pd.read_csv('cross_gz2_group_n4bdd.csv', engine='c')
-    cross = cross[(~np.isnan(cross.B_T_n4)) & (cross.B_T_n4 > -1) &
-                  (cross.z < 0.06) & (cross.petro_abs_mag < -19.38) & (cross.gz2class.str.contains('S'))]
-    print(len(cross))
-    bar_sample = cross[(cross.bar_debiased_fraction > 0.5) & (cross.gz2class.str.contains('B'))]
+    cross = pd.read_csv('cross_gz2_group_bdd.csv', engine='c')
+    vls = cross[(~np.isnan(cross.B_T_n4)) & (cross.B_T_n4 > -1) &
+                (cross.z < 0.06) & (cross.petro_abs_mag < -19.38)]
+    vls['kind'] = 'unbar'
+    bar_sample = vls[(vls.bar_debiased_fraction > 0.5) & (vls.gz2class.str.contains('B'))]
+    bar_sample['kind'] = 'bar'
 
     # g = sns.regplot(x='z', y='petro_abs_mag', data=bar_sample, scatter_kws={'s': 7}, color=flatui[1], fit_reg=False)
     # g.set(ylim=(-19, -22), title='Scatter of Mr-z and mean(B/T)')
@@ -46,22 +47,21 @@ def control_sample():
     #                'kv--')
     # h.set(ylim=(0, 0.6), ylabel='mean(B/T)')
 
-    unbar_sample = cross[(cross.bar_debiased_fraction < 0.3) & (~cross.gz2class.str.contains('B')) & (~cross.gz2class.str.contains('e'))]
-    print(len(bar_sample), len(unbar_sample), len(cross))
     ctrl = pd.DataFrame()
-    k = 0
     for i in bar_sample.index[:]:
         bs = bar_sample.ix[i]
-        cubs = unbar_sample[(abs(unbar_sample.z - bs.z) < 0.01) &
-                            (abs(unbar_sample.petro_abs_mag - bs.petro_abs_mag) < 0.1) &
-                            (abs(unbar_sample.B_T_n4 - bs.B_T_n4) < 0.01)]
-        if len(cubs) >= 5:
-            k += 1
-            # cubs['diff_B_T_n4'] = abs(cubs.B_T_n4 - bs.B_T_n4)
-            # cubs.sort_values(inplace=True, by='diff_B_T_n4')
-            # cubs.drop('diff_B_T_n4', 1, inplace=True)
-            # print(cubs[:5])
-    print(k / len(bar_sample))
+        cubs = vls[(abs(vls.z - bs.z) < 0.01) &
+                   (abs(vls.petro_abs_mag - bs.petro_abs_mag) < 0.1) &
+                   (abs(vls.B_T_n4 - bs.B_T_n4) < 0.01) &
+                   (vls.gz2id != bs.gz2id)]
+        if len(cubs) >= 3:
+            cubs['diff_B_T_n4'] = abs(cubs.B_T_n4 - bs.B_T_n4)
+            cubs['diff_Mr'] = abs(cubs.petro_abs_mag - bs.petro_abs_mag)
+            cubs.sort_values(inplace=True, by=['diff_B_T_n4', 'diff_Mr'])
+            cubs.drop(['diff_B_T_n4', 'diff_Mr'], 1, inplace=True)
+            ctrl = ctrl.append(bs.to_frame().T.append(cubs[:3]))
+
+    print(len(ctrl[(ctrl.kind == 'unbar') & (ctrl.gz2clss.str.contain('B'))]), len(ctrl))
     # print(control_unbar_sample)
 
 
@@ -76,10 +76,16 @@ def verify():
 
 def plot_distribution():
     cross = pd.read_csv('cross_gz2_group_bdd.csv', engine='c')
-    vlc = cross[(cross.z < 0.06) & (cross.petro_abs_mag < -19.38)]
-    vlc = vlc[(vlc.B_T_n4 > -1) & (vlc.B_T_fn > -1)]
-    vlc['diff_B_T'] = abs(vlc.B_T_n4-vlc.B_T_fn)
-    vlc.diff_B_T.plot.hist()
+    vls = cross[(cross.z < 0.06) & (cross.petro_abs_mag < -19.38) & (~np.isnan(cross.B_T_n4)) & (cross.B_T_n4 > -1)]
+    # B_T distribution
+    vls = vls[~vls.gz2class.str.contains('B')]
+    sns.distplot(vls[vls.petro_abs_mag > -20].B_T_n4, bins=np.linspace(0, 1, 11), rug=False, kde=False, norm_hist=False,
+                 hist=True, hist_kws={'histtype': 'step', 'linewidth': 3}, color='blue').set(xlim=(-0.04, 1.04))
+    sns.distplot(vls[(vls.petro_abs_mag > -21) & (vls.petro_abs_mag < -20)].B_T_n4, bins=np.linspace(0, 1, 11), rug=False, kde=False, norm_hist=False,
+                 hist=True, hist_kws={'histtype': 'step', 'linewidth': 3}, color='red').set(xlim=(-0.04, 1.04))
+    sns.distplot(vls[vls.petro_abs_mag < -21].B_T_n4, bins=np.linspace(0, 1, 11), rug=False, kde=False, norm_hist=False,
+                 hist=True, hist_kws={'histtype': 'step', 'linewidth': 3}, color='green').set(xlim=(-0.04, 1.04))
+    plt.legend(('-20 < Mr < -19.38', '-21 < Mr < -20', 'Mr < -21'))
 
 
 if __name__ == '__main__':
@@ -96,6 +102,6 @@ if __name__ == '__main__':
         5: 'Low S/N Liner'
     }
     # creat_cross_sample()
-    # control_sample()
-    plot_distribution()
+    control_sample()
+    # plot_distribution()
     sns.plt.show()
